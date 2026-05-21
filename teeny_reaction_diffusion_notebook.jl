@@ -4,6 +4,188 @@
 using Markdown
 using InteractiveUtils
 
+# ╔═╡ e97b960f-8d50-4a09-ab59-7eb0483215bd
+### Noodling around with Grey-Scott reaction-diffusion modelling###
+
+begin
+	using GLMakie
+
+	n = 300 # x sq grid
+	U = ones(n, n) #prime cells with full concentration of substrate
+	V = zeros(n, n) #prime cells with no culture
+	#U/V = substrate/catalyst = forage/forager, using substrate/culture bc biology
+
+	# single node-seed 
+	r = 80:100 #range defined--this one centerish
+	U[r, r] .= 0.50 #this area has less substrate 
+	V[r, r] .= 0.25 #this area has some culture (dot means apply to many cells)
+
+	#=making multi-node seed
+	
+	for (x,y) in [(50,60), (120,80), (90,140), (140,135)]
+    U[x-6:x+6, y-6:y+6] .= 0.50 #drawing a block, iterates through the tuple array
+    V[x-6:x+6, y-6:y+6] .= 0.25
+	end=#
+
+
+	#making a neighbor checking function (finite-difference Laplacian), A is whatever matrix
+	function lap(A) 
+	    circshift(A, (1,0)) + circshift(A, (-1,0)) +
+	    circshift(A, (0,1)) + circshift(A, (0,-1)) -
+	    4A #checks up, down, left, right, then subtract current cell 4x
+	end
+	#=tl;dr: neighbor average pressure - current value =  behavior 
+
+	How different am I from my nearby cells? 
+	Should stuff spread into me or out of me? =#
+
+	#defining one function step
+	function step!(U, V; Du=0.16, Dv=0.08, F=0.022, k=0.051 )
+	    UVV = U .* V .* V
+	    U .+= Du .* lap(U) .- UVV .+ F .* (1 .- U)
+	    V .+= Dv .* lap(V) .+ UVV .- (F + k) .* V
+	end
+	
+
+	#run update many times
+	V .+= 0.06 .* rand(n, n) #add rando bits of goo to cells
+	for i in 1:8000
+	    step!(U, V)
+	end
+
+	#look, a thing you understand
+	fig = Figure(size=(700, 700)) #canvas
+	ax = Axis(fig[1, 1], aspect=1) # plot
+	hidedecorations!(ax)
+	hidespines!(ax)
+	heatmap!(ax, V, colormap=:tableau_summer) #plot v as color
+	fig
+end
+
+# saving if you get a good one
+#save("high_res_reaction_diffusion.png", fig, px_per_unit=4) #pixel per unit scale!!
+
+
+
+# ╔═╡ f03bddc4-7bb2-49eb-a01b-b7bc0b5ab443
+# ╠═╡ disabled = true
+#=╠═╡
+#=	extra implementationulary tippies:
+	-remember to start with smaller n if yr gonna noodle a billion times/steps, like you know you do
+	-you might want higher resolution after you start small
+		and artbrain is going to want to just set n to fig size
+		but remember: size of n != figure resolution, 
+		you scaled the world without scaling anything else (the seed), ya GOOF!
+		-you get to twiddle with ONLY n, seed size, and steps for resolution...if you want to keep your sanity
+	-yea you should make sure you allocate and make a cuppa while the final visualization runs
+		-its not really a cpu thing its the number of update steps + size mostly...combinatorix and all that
+		-no but really do take time to allocate
+	-also Makie can do real-time viz with Observable (commented out at the bottom)
+	-also also putting this here bc I know how picky you are and you should really close tabs sometimes (https://juliagraphics.github.io/ColorSchemes.jl/stable/catalogue/?utm_source=chatgpt.com)
+=#
+
+
+
+# ✨ An overexplained guide to scaling up the resolution of a system you like ✨ #
+
+begin
+	using GLMakie
+
+	# 1. Step up the grid resolution...remember that this isnt just bigger, it's denser
+	
+	n = 900 
+	U = ones(n, n)
+	V = zeros(n, n)
+   
+
+	#= 2. SCALE THE SEED and put it center if you didn't and it's whitespacing.
+	#the tl;dr is if you start too close to the edges and are ramping up the speed per step circshift edgewraps and the substrate seed can't get thick enough to compete, diffuses to death and can't get a good feedback loop loopin. 
+	#also you could just...try multi-seeds, see way below for how to scale that
+	
+	REMEMBER the seed needs to scale proportionately to n:
+	half_width = n ÷ 10 gives ~10% of the grid on each side of center,
+	so the total patch is ~20% of the grid width. =#
+	
+	mid = n ÷ 2
+	half_width = n ÷ 10 # this is what you play with
+	r = (mid - half_width):(mid + half_width)
+	U[r, r] .= 0.50
+	V[r, r] .= 0.25
+
+#= REMEMBER half_width is the one knob for seed size. bigger = more V to start with, less likely to whitespace. smaller = more precious diva, might dissolve. mid just keeps it centered automatically whatever you pick.=#
+	
+	#= 3. SUPER IMPORTANT IF RUNNING SLOW: Depending on size of simulation you're gonna need to do a little allocation bc julia julia makes and throws away a new array 5x every lap call (4 shifts + the 4A) and you call lap twice per step, so...maybe don't do that?
+	
+	instead of making new arrays, you hand the function two reusable bins: 
+	"out" (where the result goes) and "tmp" (temporary scratch pad) 
+	=#
+	
+function lap!(out, A, tmp)
+    circshift!(tmp, A, (1, 0));  out .= tmp      # write shift into tmp, copy to out
+    circshift!(tmp, A, (-1, 0)); out .+= tmp     # write shift into tmp, ADD to out
+    circshift!(tmp, A, (0, 1));  out .+= tmp     # same
+    circshift!(tmp, A, (0, -1)); out .+= tmp     # same
+    out .-= 4 .* A                               # subtract 4A in place
+end
+		#"out" accumulates the sum. "tmp" gets overwritten each time. No new arrays.
+			#probably should have done it this way to begin with but...you know.
+	
+	##also you never scale the lap bc it would be chunky
+
+	
+	#3a. NEXT you pre-allocate those buckets once, before the loop:
+	
+lapU = zeros(n, n)   # bucket for lap(U) result
+lapV = zeros(n, n)   # bucket for lap(V) result
+tmp  = zeros(n, n)   # scratch pad shared by both calls
+
+	#####for the love of mods, remember to update your steppy steppin step loop step_hd! at the end or else this was all in vain. you will forget to do this and it will enrage you so heed this#####
+	
+
+	
+	#= 4. DON'T TOUCH the params if you have something you like: I would like it to be known that I spent FOREVER HERE for some reason thinking that you needed to scale Du and Dv by n²...which is fine for perfect diffusion...seemingly ignoring the fact that this is a REACTION-Diffusion model and the whole thing would collapse in under 100 steps. diffusion is a property of the space and size matters but reaction params are independent of grid and would have needed to stay static to preserve the nature of the interaction but just scaling Du/Dv outpaces F and k stupid fast. Clearly a kill issue. =#
+	
+function step_hd!(U, V, lapU, lapV, tmp;
+                  Du=0.16, Dv=0.08, F=0.022, k=0.051)
+    lap!(lapU, U, tmp)
+    lap!(lapV, V, tmp)
+    UVV  = U .* V .* V
+    U .+= Du .* lapU .- UVV .+ F .* (1 .- U)
+    V .+= Dv .* lapV .+ UVV .- (F + k) .* V
+end
+
+	
+	# 5. Lower the background noise so it doesn't overwhelm the dense grid
+		# it might have to be lower than you think
+	V .+= 0.01 .* rand(n, n) 
+	
+	# Because the grid is larger, you might need more steps for the party bus to completely travel across the canvas...but try not to wildly overshoot or the viz will be off
+	for i in 1:12000
+	    step_hd!(U, V, lapU, lapV, tmp)  # remember 
+		# same buckets, every iteration see section 3a.
+	end
+
+	# you did it!
+	fig = Figure(size=(900, 900)) 
+	ax = Axis(fig[1, 1], aspect=1) 
+	hidedecorations!(ax); hidespines!(ax)
+	heatmap!(ax, V, colormap=:tableau_summer) 
+	fig
+end
+
+	#Watch it in ACTION!!
+	#= V_obs = Observable(V)
+		heatmap!(ax, V_obs, colormap=:tableau_summer)
+
+	for i in 1:8000
+    	step_hd!(U, V, lapU, lapV, tmp)
+    	if i % 50 == 0          # update display every 50 steps
+        	V_obs[] = copy(V)   # push new frame
+        	sleep(0.01)         # let makie breathe
+    	end
+end =# 
+  ╠═╡ =#
+
 # ╔═╡ e18ce0d9-c069-4639-839d-c706a6e683ab
 #= Scaling multi-node seeds actually using code:
 
@@ -31,9 +213,6 @@ for (old_x, old_y) in old_nodes
     V[x - new_radius : x + new_radius, y - new_radius : y + new_radius] .= 0.25
 end
 =#
-
-# ╔═╡ e80f1f14-6967-4709-800e-5b97d62e2e6b
-
 
 # ╔═╡ 79986cfe-9b47-45f0-94d5-d96277bc403c
 #= 	Extensive comments as to how this works bc who am I, Euler? 
@@ -106,167 +285,6 @@ The culture (V) blooms anywhere there is substrate/food (U) AND already a critic
 THEMES you can try out:
 	
 	=#
-
-# ╔═╡ 8e962989-152c-495e-b251-65dc539d935a
-
-
-# ╔═╡ f03bddc4-7bb2-49eb-a01b-b7bc0b5ab443
-#=	extra implementationulary tippies:
-	-remember to start with smaller n if yr gonna noodle a billion times/steps, like you know you do
-	-you might want higher resolution after you start small
-		and artbrain is going to want to just set n to fig
-		but remember: size of n != figure resolution, 
-		you scaled the world without scaling anything else, ya GOOF!
-		-you get to twiddle with n, seed size, and steps for resolution...THATS IT
-	-yea you should make sure you allocate and make a cuppa while the final visualization runs, its not really a cpu thing its the number of update steps + size mostly...combinatorix and all that, no but really do take time to allocate=#
-
-begin
-	using GLMakie
-
-	# 1. Step up the grid resolution...remember that this isnt just bigger, it's denser
-	
-	n = 900 
-	U = ones(n, n)
-	V = zeros(n, n)
-   
-
-	#= 2. Scale the seed and put it center if you didn't and it's whitespacing.
-	#the tl;dr is if you start too close to the edges and are ramping up the speed per step circshift edgewraps and the substrate seed can't get thick enough to compete, diffuses to death and can't get a good feedback loop loopin. 
-	#also you could just...try multi-seeds, see below for how to scale that
-	
-	REMEMBER the seed needs to scale proportionately to n:
-	half_width = n ÷ 10 gives ~10% of the grid on each side of center,
-	so the total patch is ~20% of the grid width. =#
-	
-	mid = n ÷ 2
-	half_width = n ÷ 10 # this is what you play with
-	r = (mid - half_width):(mid + half_width)
-	U[r, r] .= 0.50
-	V[r, r] .= 0.25
-
-#= REMEMBER half_width is the one knob for seed size. bigger = more V to start with, less likely to whitespace. smaller = more delicate, might dissolve. mid just keeps it centered automatically whatever you pick.=#
-	
-	#= 3. SUPER IMPORTANT IF RUNNING SLOW: Depending on size of simulation you're gonna need to do a little allocation bc julia julia makes and throws away a new array 5x every lap call (4 shifts + the 4A) and you call lap twice per step, so...maybe don't do that?
-	
-	instead of making new arrays, you hand the function two reusable bins: 
-	"out" (where the result goes) and "tmp" (temporary scratch pad) 
-	=#
-	
-function lap!(out, A, tmp)
-    circshift!(tmp, A, (1, 0));  out .= tmp      # write shift into tmp, copy to out
-    circshift!(tmp, A, (-1, 0)); out .+= tmp     # write shift into tmp, ADD to out
-    circshift!(tmp, A, (0, 1));  out .+= tmp     # same
-    circshift!(tmp, A, (0, -1)); out .+= tmp     # same
-    out .-= 4 .* A                               # subtract 4A in place
-end
-		#"out" accumulates the sum. "tmp" gets overwritten each time. No new arrays.
-			#probably should have done it this way to begin with but...you know.
-	
-	##also you never scale the lap bc it would be chunky
-
-	
-	#3a. NEXT you pre-allocate those buckets once, before the loop:
-	
-lapU = zeros(n, n)   # bucket for lap(U) result
-lapV = zeros(n, n)   # bucket for lap(V) result
-tmp  = zeros(n, n)   # scratch pad shared by both calls
-
-	#####for the love of mods, remember to update your steppy steppin step loop step_hd! at the end or else this was all in vain. you will forget to do this and it will enrage you so heed this#####
-	
-
-	
-	#= 4. DON'T TOUCH the params if you have something you like: I would like it to be known that I spent FOREVER HERE for some reason thinking that you needed to scale Du and Dv by n²...which is fine for perfect diffusion...seemingly ignoring the fact that this is a REACTION-Diffusion model and the whole thing would collapse in under 100 steps. diffusion is a property of the space and size matters but reaction params are independent of grid and would have needed to stay static to preserve the nature of the interaction but just scaling Du/Dv outpaces F and k stupid fast. Clearly a kill issue. =#
-	
-function step_hd!(U, V, lapU, lapV, tmp;
-                  Du=0.16, Dv=0.08, F=0.022, k=0.051)
-    lap!(lapU, U, tmp)
-    lap!(lapV, V, tmp)
-    UVV  = U .* V .* V
-    U .+= Du .* lapU .- UVV .+ F .* (1 .- U)
-    V .+= Dv .* lapV .+ UVV .- (F + k) .* V
-end
-
-	
-	# 5. Lower the background noise so it doesn't overwhelm the dense grid
-		# it might have to be lower than you think
-	V .+= 0.01 .* rand(n, n) 
-	
-	# Because the grid is larger, you might need more steps for the party bus to completely travel across the canvas...but try not to wildly overshoot or the viz will be off
-	for i in 1:12000
-	    step_hd!(U, V, lapU, lapV, tmp)  # remember 
-		# same buckets, every iteration see section 3a.
-	end
-
-	# you did it!
-	fig = Figure(size=(900, 900)) 
-	ax = Axis(fig[1, 1], aspect=1) 
-	hidedecorations!(ax); hidespines!(ax)
-	heatmap!(ax, V, colormap=:tableau_summer) 
-	fig
-end
-
-# ╔═╡ e97b960f-8d50-4a09-ab59-7eb0483215bd
-### Noodling around with Grey-Scott reaction-diffusion modelling###
-
-begin
-	using GLMakie
-
-	n = 300 # x sq grid
-	U = ones(n, n) #prime cells with full concentration of substrate
-	V = zeros(n, n) #prime cells with no culture
-	#U/V = substrate/catalyst = forage/forager, using substrate/culture bc biology
-
-	# single node-seed 
-	r = 80:100 #range defined--this one centerish
-	U[r, r] .= 0.50 #this area has less substrate 
-	V[r, r] .= 0.25 #this area has some culture (dot means apply to many cells)
-
-	#=making multi-node seed
-	
-	for (x,y) in [(50,60), (120,80), (90,140), (140,135)]
-    U[x-6:x+6, y-6:y+6] .= 0.50 #drawing a block, iterates through the tuple array
-    V[x-6:x+6, y-6:y+6] .= 0.25
-	end=#
-
-
-	#making a neighbor checking function (finite-difference Laplacian), A is whatever matrix
-	function lap(A) 
-	    circshift(A, (1,0)) + circshift(A, (-1,0)) +
-	    circshift(A, (0,1)) + circshift(A, (0,-1)) -
-	    4A #checks up, down, left, right, then subtract current cell 4x
-	end
-	#=tl;dr: neighbor average pressure - current value =  behavior 
-
-	How different am I from my nearby cells? 
-	Should stuff spread into me or out of me? =#
-
-	#defining one function step
-	function step!(U, V; Du=0.16, Dv=0.08, F=0.022, k=0.051 )
-	    UVV = U .* V .* V
-	    U .+= Du .* lap(U) .- UVV .+ F .* (1 .- U)
-	    V .+= Dv .* lap(V) .+ UVV .- (F + k) .* V
-	end
-	
-
-	#run update many times
-	V .+= 0.06 .* rand(n, n) #add rando bits of goo to cells
-	for i in 1:8000
-	    step!(U, V)
-	end
-
-	#look, a thing you understand
-	fig = Figure(size=(700, 700)) #canvas
-	ax = Axis(fig[1, 1], aspect=1) # plot
-	hidedecorations!(ax)
-	hidespines!(ax)
-	heatmap!(ax, V, colormap=:tableau_summer) #plot v as color
-	fig
-end
-
-# saving if you get a good one
-#save("high_res_reaction_diffusion.png", fig, px_per_unit=4) #pixel per unit scale!!
-
-
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1940,8 +1958,6 @@ version = "1.13.0+0"
 # ╠═e97b960f-8d50-4a09-ab59-7eb0483215bd
 # ╠═f03bddc4-7bb2-49eb-a01b-b7bc0b5ab443
 # ╠═e18ce0d9-c069-4639-839d-c706a6e683ab
-# ╟─e80f1f14-6967-4709-800e-5b97d62e2e6b
 # ╠═79986cfe-9b47-45f0-94d5-d96277bc403c
-# ╠═8e962989-152c-495e-b251-65dc539d935a
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
