@@ -221,19 +221,19 @@ end
 anyway...reaction-diffusion equation (gray-scott):
 
 	[ u Change ]      [ Diffusion ]         [ Local Reaction ]
-     du / dt    =  		Du * (∇² u)     - 	(u * v²) + F * (1 - u)
+      du / dt     =  	Du * (∇² u)    - 	(u * v²) + F * (1 - u)
 
    [ v Change ]      [ Diffusion ]         [ Local Reaction ]
-    dv / dt    =  	Dv * (∇² v)       + 	(u * v²) - (F + k) * v
+     dv / dt      =  	Dv * (∇² v)    + 	(u * v²) - (F + k) * v
 
 where:
-∇² (Laplacian) = Spatial smoothing matrix (neighbor checks)
-  Du, Dv         = Diffusion rates
+∇² (Laplacian)    = Spatial smoothing matrix (neighbor checks) 
+  Du, Dv          = Diffusion rates
    -uv² / +uv²    = Non-linear conversion (1 unit of u + 2 of v -> more v)
    F              = Feed rate (replenishing u)
    k              = Kill rate (removing v)
 
-###also, just an aside...inverted delta \nabla SHOULD not exist and upsets me.###
+###also, just an aside...inverted delta \nabla SHOULD not exist and upsets me###
 
 But for purposes here:
 
@@ -260,7 +260,7 @@ The culture (V) blooms anywhere there is substrate/food (U) AND already a critic
 
 		.+ F .* (1 .- U) [food gets replenished back towards 1]
 
-	tldr:
+	tl;dr:
 	U changes by:
 	spread food
 	minus food eaten by culture
@@ -275,7 +275,7 @@ The culture (V) blooms anywhere there is substrate/food (U) AND already a critic
 
 		.- (F + k) .* V [culture dies/gets removed.]
 	
-	tldr:
+	tl;dr:
 	V changes by:
 	spread of culture
 	plus new cultures from reaction
@@ -318,7 +318,7 @@ The culture (V) blooms anywhere there is substrate/food (U) AND already a critic
 ## III. Localized Structures / Dissipative Solitons
 *Stable isolated objects embedded in a uniform background. Weird little doo-dadders that shouldn't exist but do.*
 
-**solitons** — stable spots that travel across the grid without changing shape or dying. very specific parameter regime, possibly magic. think: what would it take for V to be stable enough to hold its shape but restless enough to move?
+**solitons** — stable spots that travel across the grid without changing shape or dying. very specific parameter regime, possibly magic. think: what would it take for V to be stable enough to hold its shape but restless enough to move? Not sure if possible in this sys.
 > also: traveling spots, localized pulses, stable isolated islands, gliders (yes like Conway)
 
 ---
@@ -358,8 +358,8 @@ what happens at the boundary of a stable spot when the food supply is juuust rig
 
 
 
-
-i lost the fully fleshed out bespoke version of this bc notebook autosave weirdness and github preview tomfoolery and i would like to scream, thanks
+**note: I messed up a save and lost the original version of this comment block 
+this is an attempted reconstruction from scattered notes and may not be fully accurate or helpful
 
 
 =#
