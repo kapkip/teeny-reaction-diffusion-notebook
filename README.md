@@ -1,4 +1,4 @@
-# teeny_reaction_diffusion_notebook
+# teeny-reaction-diffusion-notebook
 Goofing around with reaction-diffusion models in Julia.
 
 This notebook includes:
