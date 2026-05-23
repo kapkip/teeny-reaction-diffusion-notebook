@@ -38,9 +38,8 @@ begin
 	How different am I from my nearby cells? 
 	Should stuff spread into me or out of me? 
 	
-	Ok but you may at some point ask yourself why are we only checking 4 cardinal neighbors? 
-	The tl;dr is that it's good enough here rn and the math scales in complexity and compu-crunch quickly.
-	I try to explain below
+	Ok but you may at some point ask yourself how did I get here, why are we only checking 4 cardinal neighbors? 
+	The tl;dr is that it's good enough here but if you want to know more see nots on the lap function below
 	=#
 
 	#defining one function step
@@ -228,19 +227,28 @@ end
 anyway...reaction-diffusion equation (gray-scott):
 
 	[ u Change ]      [ Diffusion ]         [ Local Reaction ]
-      du / dt     =  	Du * (∇² u)    - 	(u * v²) + F * (1 - u)
+      ∂u / ∂t      =  	Du * (∇² u)    - 	(u * v²) + F * (1 - u)
 
    [ v Change ]      [ Diffusion ]         [ Local Reaction ]
-     dv / dt      =  	Dv * (∇² v)    + 	(u * v²) - (F + k) * v
+     ∂v / ∂t       =  	Dv * (∇² v)    + 	(u * v²) - (F + k) * v
 
 where:
-∇² (Laplacian)    = Spatial smoothing matrix (neighbor checks) 
-  Du, Dv          = Diffusion rates
-   -uv² / +uv²    = Non-linear conversion (1 unit of u + 2 of v -> more v)
+
+∇² (Laplacian)    = patial curvature / diffusion operator
+                     approximated numerically via local neighbors (checks/stencil)
+
+  Du, Dv          = Diffusion rates controlling spread
+
+ -uv² / +uv²      = Nonlinear autocatalytic reaction (the wildcarder)
+                     (u is consumed, v is produced (u + 2v -> 3v))
    F              = Feed rate (replenishing u)
+
    k              = Kill rate (removing v)
 
-###also, just an aside...inverted delta \nabla SHOULD not exist and upsets me###
+ 	note: (bc u suck at math) ∂ is just the symbol for partial derivative when 				you go multivariate A=A(x,y,t) bc we're dealing with x y and time. 
+			∂A / ∂t is just how the field evolves...
+
+###also, just an aside...\nabla SHOULD not exist and is aesthetically troubling###
 
 But for purposes here:
 
@@ -289,18 +297,97 @@ The culture (V) blooms anywhere there is substrate/food (U) AND already a critic
 	minus culture death/removal
 
 
-On finite-difference laplacian stencils:
-This should go up top but is kind of long winded 
+On laplacian stencils:
+WARNING: This should go up top but is kind of long winded and idk who cares
 
-so whats really going on with 
-function lap(A) 
-	    circshift(A, (1,0)) + circshift(A, (-1,0)) +
-	    circshift(A, (0,1)) + circshift(A, (0,-1)) -4A 
-	end?
+The 5-point finite-difference laplacian stencil:
+	so whats really going on with 
+	function lap(A) 
+	    	circshift(A, (1,0)) + circshift(A, (-1,0)) +
+	    	circshift(A, (0,1)) + circshift(A, (0,-1)) -4A 
+		end ?"?
+
+assume: circshift edgewraps and the field/universe is torodial, 
+		bc the math would implode if you didn't. If you want actual words, 
+		these are "periodic bounding conditions"
+
+where:
+
+	lap(A) = ∇²A = d²A/dx² + d²A/dy²
+
+On a grid, the five-point stencil approximates this as:
+
+	∇²A[i,j] ≈ A[i+1,j] + A[i-1,j] + A[i,j+1] + A[i,j-1] - 4A[i,j]
+
+		you're basically directly computing derivatives from neighbors
+			the -4A[i,j] is the comparingy part
+
+ assuming grid spacing h = 1...
+
+ Stencil shape:
+
+       0    1    0
+       1   -4    1
+       0    1    0
+
+So this is only the cardinal directions
+
+	Fun fact: in automata/lattice speak this cardinal direction move is a
+	von Neumann neighborhood...impress the friends you don't have!
+
+Anyway so maybe you're wondering why the heck four neighbors?! EIGHT NEIGHBOR BETTER!
+yes and no, but don't worry someone thought of that.
+
+the 9-point finite-difference Laplacian stencil:
+		Note: Not a computational nightmare to implement if you want, may help with smoothing
+
+Same target operator:
+
+	∇²A = d²A/dx² + d²A/dy²
+
+	But this approximation also samples diagonal neighbors to reduce grid-direction bias.
+
+   ∇²A[i,j] ≈ (4 * cardinal_neighbors + 1 * diagonal_neighbors - 20 * A[i,j])/ 6
+
+			Note: remember this is a pde and the words are making this equation actually comprehensible
+
+ Stencil shape:
+
+      1/6    4/6    1/6
+      4/6   -20/6   4/6
+      1/6    4/6    1/6
+
+		Hey why the neighbor number different?!
+Cardinals get more weight because they are distance 1 away.
+Diagonals get less weight because they are distance sqrt(2) away.
+
+		OK, but why -20/6?!
+Four cardinal neighbors weighted by 4 (4x4=16)
+Four diagonal neighbors wieghtd by 1 (4)
+Total weight of 20. Divide by 6 to renormalize weight.
+
+function lap9(A)
+    cardinals =
+        circshift(A, (1,0)) + circshift(A, (-1,0)) +
+        circshift(A, (0,1)) + circshift(A, (0,-1))
+
+    diagonals =
+        circshift(A, (1,1)) + circshift(A, (1,-1)) +
+        circshift(A, (-1,1)) + circshift(A, (-1,-1))
+
+    (4cardinals + diagonals - 20A) / 6
+end
+
+And sure you can go explode the grid out and scale up your finite-difference stencils to 13, 15, 25 and more at your leisure.
+
+Theres also compact higher-order stencils (which couples derivitive estimates and looks like a bummer computationally for human and computer), and spectral laplacians (which is objectively a sick-ass name and basically involves fourier transformations and frequency tomfoolery to better express curvature and ends up being super accurate and slick but can get cpu heavy bc every point is talking to every other point at every point), and a bunch of other ones for more specific conditions like different geometries (finite element methods), moving geometries, complex boundaries etc.-- but like you really don't need to know that right now or possibly ever.
+
+
 	=#
 
 # ╔═╡ 0a319cb8-5f22-4feb-9f3f-5d13083c1c3c
-#=#Gray–Scott reaction-diffusion patterns you can try to recreate for fun with this model if thats what you think fun is:
+#=
+#Gray–Scott reaction-diffusion patterns you can try to recreate for fun with this model if thats what you think fun is:
 
 ## I. Classic Turing Patterns
 *Static or quasi-static spatial order emerging from diffusion-driven instability. These are the models of the model.*
