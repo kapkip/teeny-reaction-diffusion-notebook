@@ -31,13 +31,17 @@ begin
 	#making a neighbor checking function (finite-difference Laplacian), A is whatever matrix
 	function lap(A) 
 	    circshift(A, (1,0)) + circshift(A, (-1,0)) +
-	    circshift(A, (0,1)) + circshift(A, (0,-1)) -
-	    4A #checks up, down, left, right, then subtract current cell 4x
+	    circshift(A, (0,1)) + circshift(A, (0,-1)) -4A #checks up, down, left, right, then subtract current cell 4x
 	end
 	#=tl;dr: neighbor average pressure - current value =  behavior 
 
 	How different am I from my nearby cells? 
-	Should stuff spread into me or out of me? =#
+	Should stuff spread into me or out of me? 
+	
+	Ok but you may at some point ask yourself why are we only checking 4 cardinal neighbors? 
+	The tl;dr is that it's good enough here rn and the math scales in complexity and compu-crunch quickly.
+	I try to explain below
+	=#
 
 	#defining one function step
 	function step!(U, V; Du=0.16, Dv=0.08, F=0.022, k=0.051 )
@@ -283,7 +287,16 @@ The culture (V) blooms anywhere there is substrate/food (U) AND already a critic
 	spread of culture
 	plus new cultures from reaction
 	minus culture death/removal
-	
+
+
+On finite-difference laplacian stencils:
+This should go up top but is kind of long winded 
+
+so whats really going on with 
+function lap(A) 
+	    circshift(A, (1,0)) + circshift(A, (-1,0)) +
+	    circshift(A, (0,1)) + circshift(A, (0,-1)) -4A 
+	end?
 	=#
 
 # ╔═╡ 0a319cb8-5f22-4feb-9f3f-5d13083c1c3c
