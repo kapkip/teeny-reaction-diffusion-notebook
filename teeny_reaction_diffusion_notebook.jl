@@ -75,6 +75,8 @@ end
 #=╠═╡
 #=	extra implementationulary tippies:
 	-remember to start with smaller n if yr gonna noodle a billion times/steps, like you know you do
+	-don't forget to check out viz at early step count, if you want, or not, I'm not yr boss
+		-sometimes profound weirdness behaviors are found before stable regime settles...hmm what else does this make you think of?
 	-you might want higher resolution after you start small
 		and artbrain is going to want to just set n to fig size
 		but remember: size of n != figure resolution, 
@@ -87,9 +89,10 @@ end
 	-also Makie can do real-time viz with Observable (commented out at the bottom)
 	-also also putting this here bc I know how picky you are with color and you should really close tabs sometimes 
 		(https://juliagraphics.github.io/ColorSchemes.jl/stable/catalogue/)
-=#
-
-
+		-don't underestimate how different color mappings (cat, cont, cyc, diverg, etc)
+			can really change the tone, emphasis, and idk... like, the perceptual ontology of the system? does that make sense? 
+			like are you perfectly visualizing diffusion with cat map? no. but something more conceptually interesting is going on.
+			I'm not explaining this well but just make it do the thing--different colormaps make it look different and cool, like duh.
 
 # ✨ An overexplained guide to scaling up the resolution of a system you like ✨ #
 
@@ -111,15 +114,15 @@ begin
 	half_width = n ÷ 10 gives ~10% of the grid on each side of center,
 	so the total patch is ~20% of the grid width. =#
 	
-	mid = n ÷ 2
-	half_width = n ÷ 10 # this is what you play with
+	mid = n / 2
+	half_width = n / 10 	# this is what you play with
 	r = (mid - half_width):(mid + half_width)
 	U[r, r] .= 0.50
 	V[r, r] .= 0.25
 
 #= REMEMBER half_width is the one knob for seed size. bigger = more V to start with, less likely to whitespace. smaller = more precious diva, might dissolve. mid just keeps it centered automatically whatever you pick.=#
 	
-	#= 3. SUPER IMPORTANT IF RUNNING SLOW: Depending on size of simulation you're gonna need to do a little allocation bc julia julia makes and throws away a new array 5x every lap call (4 shifts + the 4A) and you call lap twice per step, so...maybe don't do that?
+	#= 3. SUPER IMPORTANT IF RUNNING SLOW: Depending on size of simulation you're gonna need to do a little allocation bc w/o julia makes and throws away a new array 5x every lap call (4 shifts + the 4A) and you call lap twice per step, so...maybe don't do that?
 	
 	instead of making new arrays, you hand the function two reusable bins: 
 	"out" (where the result goes) and "tmp" (temporary scratch pad) 
@@ -135,7 +138,8 @@ end
 		#"out" accumulates the sum. "tmp" gets overwritten each time. No new arrays.
 			#probably should have done it this way to begin with but...you know.
 	
-	##also you never scale the lap bc it would be chunky
+	##also you never scale the lap coords bc it would be chunky, non-local, and get glitchy (would be interesting to see), 
+		but see the bit on laplacian stencils for making it perform smooth-ier if you really wanna fiddle
 
 	
 	#3a. NEXT you pre-allocate those buckets once, before the loop:
@@ -144,7 +148,9 @@ lapU = zeros(n, n)   # bucket for lap(U) result
 lapV = zeros(n, n)   # bucket for lap(V) result
 tmp  = zeros(n, n)   # scratch pad shared by both calls
 
-	#####for the love of mods, remember to update your steppy steppin step loop step_hd! or else this was all in vain. you will forget to do this and it will enrage you so heed this#####
+	##### for the love of mods, remember to update your steppy steppin step 
+			--> loop step_hd! <-- or else this was all in vain.
+	#### you WILL forget to do this and it will enrage you so heed this#####
 	
 
 	
@@ -174,7 +180,7 @@ end
 	fig = Figure(size=(900, 900)) 
 	ax = Axis(fig[1, 1], aspect=1) 
 	hidedecorations!(ax); hidespines!(ax)
-	heatmap!(ax, V, colormap=:tableau_summer) 
+	heatmap!(ax, V, colormap=:tableau_summer)
 	fig
 end
 
@@ -245,7 +251,8 @@ where:
 
    k              = Kill rate (removing v)
 
- 	note: (bc u suck at math) ∂ is just the symbol for partial derivative when 				you go multivariate A=A(x,y,t) bc we're dealing with x y and time. 
+ 	note: (bc u suck at math) ∂ is just the symbol for partial derivative when 
+			you go multivariate A=A(x,y,t) bc we're dealing with x, y, and time. 
 			∂A / ∂t is just how the field evolves...
 
 ###also, just an aside...\nabla SHOULD not exist and is aesthetically troubling###
@@ -380,7 +387,11 @@ end
 
 And sure you can go explode the grid out and scale up your finite-difference stencils to 13, 15, 25 and more at your leisure.
 
-Theres also compact higher-order stencils (which couples derivitive estimates and looks like a bummer computationally for human and computer), and spectral laplacians (which is objectively a sick-ass name and basically involves fourier transformations and frequency tomfoolery to better express curvature and ends up being super accurate and slick but can get cpu heavy bc every point is talking to every other point at every point), and a bunch of other ones for more specific conditions like different geometries (finite element methods), moving geometries, complex boundaries etc.-- but like you really don't need to know that right now or possibly ever.
+Theres also compact higher-order stencils (which couples derivitive estimates, and looks like a bummer computationally for human and computer), 
+and spectral laplacians (which is objectively a sick-ass name and basically involves fourier transformations and frequency tomfoolery 
+to better express curvature and ends up being super accurate and slick but can get cpu heavy bc every point is talking to every other point at every point), 
+and a bunch of other ones for more specific conditions like different geometries (finite element methods), moving geometries, complex boundaries etc.
+...but like you really don't need to know any of this right now or possibly ever.
 
 
 	=#
