@@ -39,7 +39,7 @@ begin
 	Should stuff spread into me or out of me? 
 	
 	Ok but you may at some point ask yourself how did I get here, why are we only checking 4 cardinal neighbors? 
-	The tl;dr is that it's good enough here but if you want to know more see nots on the lap function below
+	The tl;dr is that it's good enough here but if you want to know more see notes on the lap function below
 	=#
 
 	#defining one function step
